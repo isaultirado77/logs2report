@@ -1,0 +1,22 @@
+# Data
+data/*
+!data/.gitkeep
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# venvs
+.venv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# others
+todo.md
+.notes.md.swp
+task/
