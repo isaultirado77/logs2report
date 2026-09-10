@@ -4,22 +4,19 @@ CLI que transforma un archivo `.log` de operaciones en un reporte CSV tabular.
 
 ## Descripción
 
-Parsea logs de ADManager y extrae operaciones de reseteo de usuarios, generando un CSV con datos estructurados: timestamps, cuentas, nombres, oficinas y resultado final.
+Parsea logs y extrae operaciones de diferentes sistemas (ADManager, SAP), generando un CSV con datos estructurados: timestamps, cuentas, nombres, oficinas y resultado final.
 
-## MVP: Operaciones de reset user
+## Operaciones soportadas
 
-Este MVP procesa únicamente operaciones de reseteo de usuarios (`users_admin/resetuser`). El diseño permite agregar otras acciones sin reescribir el parser.
+- **Reset User (ADManager)**: `users_admin/resetuser`
+- **Register User (SAP)**: `sap/register_user`
 
-Cada operación consta de 4 etapas:
-1. Solicitud de reseteo (HTTP POST)
-2. Consultas a ADManager por datos de requester y target
-3. Consulta a Proactivanet (no usada en MVP)
-4. Ejecución y resultado del reseteo
+Cada flujo declara sus propios parámetros y parseo de resultado. El diseño permite agregar nuevas operaciones sin modificar el parser.
 
 ## Uso
 
 ```bash
-uv run log2report -s data/2026-09-01.log -p reports/2026-09-01.csv
+uv run logs2report -s data/2026-09-01.log -p reports/2026-09-01.csv
 ```
 
 - `-s`: Ruta del log de entrada
@@ -27,7 +24,7 @@ uv run log2report -s data/2026-09-01.log -p reports/2026-09-01.csv
 
 ## Columnas del reporte
 
-Requisitos, timestamp, updated_at, id, solicitante, target, acción, sistema, nombre completo solicitante, nombre completo target, oficina solicitante, oficina target, resultado.
+timestamp, updated_at, id, solicitante, target, acción, sistema, nombre_completo_solicitante, nombre_completo_target, oficina_solicitante, oficina_target, status_code, resultado.
 
 Los códigos de oficina conservan el cero inicial (`0520`, no `520`).
 
