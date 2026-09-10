@@ -16,6 +16,7 @@ class ResetRecord:
     target_name: str
     requester_office: str
     target_office: str
+    status_code: str
     result: str
     requisitos: str = ""  # sin definir, vacia
 
@@ -35,5 +36,6 @@ COLUMNS: list[tuple[str, str]] = [
     ("nombre completo target", "target_name"),
     ("oficina solicitante", "requester_office"),
     ("oficina target", "target_office"),
+    ("status_code", "status_code"),
     ("resultado", "result"),
 ]
