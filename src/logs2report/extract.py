@@ -99,6 +99,7 @@ def _parse_outcome(operation) -> dict:
     updated_at = None
     status = None
     status_message = None
+    status_code = None
 
     # Buscar POST a ResetPwd para obtener updated_at
     for record in operation:
@@ -126,6 +127,8 @@ def _parse_outcome(operation) -> dict:
                     response_dict = body_list[0]
                     status = response_dict.get('status')
                     status_message = response_dict.get('statusMessage', '')
+                    code_match = re.search(r'\|\s*status:\s*(\d{3})\s*\|', content)
+                    status_code = code_match.group(1) if code_match else None
                     break
             except (ValueError, IndexError, KeyError):
                 continue
@@ -137,6 +140,7 @@ def _parse_outcome(operation) -> dict:
         'updated_at': updated_at,
         'status': status,
         'statusMessage': status_message,
+        'status_code': status_code,
     }
 
 
@@ -185,5 +189,6 @@ def extract_reset(operation) -> ResetRecord:
         target_name=target_name,
         requester_office=requester_info.get('OFFICE', ''),
         target_office=target_info.get('OFFICE', ''),
+        status_code=outcome_data['status_code'],
         result=result,
     )
