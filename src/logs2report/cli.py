@@ -5,13 +5,10 @@
 
 import argparse
 from pathlib import Path
+
+from .extract import extract_operation
+from .models import ReportRow
 from .reader import read_operations
-from .extract import (
-    is_reset_operation,
-    extract_reset,
-    is_register_operation,
-    extract_register
-)
 from .report import write_csv
 
 
@@ -26,26 +23,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(source: Path, path: Path) -> None:
-    """reader -> filtro de reseteos -> extract -> report."""
-    # Leer log y agrupar por operation_id
-    operations = read_operations(str(source))
-
-    # Filtrar operaciones de reseteo y extraer
-    reset_records = []
-    for operation_id, records in operations.items():
-        if is_reset_operation(records):
-            extract = extract_reset
-        elif is_register_operation(records):
-            extract = extract_register
-        else:
+    """reader -> extract -> report."""
+    rows: list[ReportRow] = []
+    for operation_id, operation in read_operations(source).items():
+        if operation_id == 'unknown':
             continue
         try:
-            reset_records.append(extract(records))
-        except (ValueError, KeyError) as e:
+            row = extract_operation(operation_id, operation)
+        except ValueError:
             continue
-
-    # Guardar CSV
-    write_csv(reset_records, str(path))
+        if row is not None:
+            rows.append(row)
+    write_csv(rows, path)
 
 
 def main() -> None:
