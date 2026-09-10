@@ -2,9 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class ResetRecord:
-    """Una operación de reseteo, ya extraída y lista para el reporte."""
-
+class ReportRow:
     timestamp: str
     updated_at: str | None
     operation_id: str
@@ -18,13 +16,9 @@ class ResetRecord:
     target_office: str
     status_code: str
     result: str
-    requisitos: str = ""  # sin definir, vacia
 
 
-# Orden de las columnas del CSV.
-# tuplas (encabezado en el CSV, atributo de ResetRecord).
 COLUMNS: list[tuple[str, str]] = [
-    ("Requisitos", "requisitos"),
     ("timestamp", "timestamp"),
     ("updated_at", "updated_at"),
     ("id", "operation_id"),
@@ -32,10 +26,10 @@ COLUMNS: list[tuple[str, str]] = [
     ("target", "target"),
     ("acción", "action"),
     ("sistema", "system"),
-    ("nombre completo solicitante", "requester_name"),
-    ("nombre completo target", "target_name"),
-    ("oficina solicitante", "requester_office"),
-    ("oficina target", "target_office"),
+    ("nombre_completo_solicitante", "requester_name"),
+    ("nombre_completo_target", "target_name"),
+    ("oficina_solicitante", "requester_office"),
+    ("oficina_target", "target_office"),
     ("status_code", "status_code"),
     ("resultado", "result"),
 ]
