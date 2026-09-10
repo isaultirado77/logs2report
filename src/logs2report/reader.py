@@ -3,22 +3,21 @@ from pathlib import Path
 from typing import TypedDict
 
 
-class Record(TypedDict):
-    """Un registro del log con timestamp, nivel y contenido."""
+class LogEntry(TypedDict):
     timestamp: str
     level: str
     content: str
 
+Operation = list[LogEntry]
 
-def read_operations(log_path: str) -> dict[str, list[Record]]:
+
+def read_operations(log_path: str) -> dict[str, list[Operation]]:
     """
     Lee un archivo de log y agrupa registros por operation_Id.
 
     Cada registro puede abarcar varias líneas (incluidas líneas vacías).
     El único delimitador confiable es que una línea empiece con un timestamp ISO.
-    Las operaciones pueden estar intercaladas; se agrupan siempre por operation_Id,
-    nunca por proximidad.
-
+    Las operaciones pueden estar intercaladas; se agrupan siempre por operation_Id.
     Args:
         log_path: Ruta al archivo de log.
 
@@ -35,14 +34,13 @@ def read_operations(log_path: str) -> dict[str, list[Record]]:
         raise FileNotFoundError(f"Archivo de log no encontrado: {log_path}")
 
     # Regex para detectar inicio de registro (línea con timestamp ISO)
-    # Formato: YYYY-MM-DDTHH:MM:SS.FFFFFFZ | LEVEL [operation_Id=...] | ...
     record_start_pattern = re.compile(
         r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s*\|\s*(\w+)\s*\['
     )
     operation_id_pattern = re.compile(r'operation_Id=([a-f0-9]{32})')
 
-    operations: dict[str, list[Record]] = {}
-    current_record: Record | None = None
+    operations: dict[str, list[Operation]] = {}
+    current_record: LogEntry | None = None
     current_operation_id: str | None = None
 
     with open(file_path, 'r', encoding='utf-8') as f:
