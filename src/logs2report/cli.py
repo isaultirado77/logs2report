@@ -6,7 +6,12 @@
 import argparse
 from pathlib import Path
 from .reader import read_operations
-from .extract import is_reset_operation, extract_reset
+from .extract import (
+    is_reset_operation,
+    extract_reset,
+    is_register_operation,
+    extract_register
+)
 from .report import write_csv
 
 
@@ -29,12 +34,15 @@ def run(source: Path, path: Path) -> None:
     reset_records = []
     for operation_id, records in operations.items():
         if is_reset_operation(records):
-            try:
-                record = extract_reset(records)
-                reset_records.append(record)
-            except (ValueError, KeyError) as e:
-                # Ignorar operaciones que no se pueden extraer completamente
-                continue
+            extract = extract_reset
+        elif is_register_operation(records):
+            extract = extract_register
+        else:
+            continue
+        try:
+            reset_records.append(extract(records))
+        except (ValueError, KeyError) as e:
+            continue
 
     # Guardar CSV
     write_csv(reset_records, str(path))

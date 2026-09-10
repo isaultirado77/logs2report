@@ -4,6 +4,10 @@ import ast
 from .models import ResetRecord
 
 RESET_ENDPOINT = "users_admin/resetuser"
+REGISTER_ENDPOINT = "sap/register_user"
+ADMANAGER_SEARCH = "ADManagerRawClient.get_users_list_info"
+SAP_POST = "RESTAdapter/segMttoUsuario"
+SAP_RESPONSE = "SAP raw response:"
 
 
 def is_reset_operation(operation) -> bool:
@@ -16,12 +20,17 @@ def is_reset_operation(operation) -> bool:
     return False
 
 
-def _parse_request(operation) -> dict:
+def is_register_operation(operation) -> bool:
+    """¿La operación contiene una solicitud a sap/register_user?"""
+    return any(REGISTER_ENDPOINT in record['content'] for record in operation)
+
+
+def _parse_request(operation, endpoint: str, requester_param: str, target_param: str) -> dict:
     """timestamp, requester y target desde la línea de entrada."""
     # Encontrar el registro con users_admin/resetuser
     request_record = None
     for record in operation:
-        if RESET_ENDPOINT in record['content']:
+        if endpoint in record['content']:
             request_record = record
             break
 
@@ -33,8 +42,8 @@ def _parse_request(operation) -> dict:
 
     # Extraer requester y target
     # Patrón: sAMAccountName_requester=<value> y sAMAccountName_target=<value>
-    requester_match = re.search(r'sAMAccountName_requester=([^&\s"]+)', content)
-    target_match = re.search(r'sAMAccountName_target=([^&\s"]+)', content)
+    requester_match = re.search(rf'{requester_param}=([^&\s"]+)', content)
+    target_match = re.search(rf'{target_param}=([^&\s"]+)', content)
 
     if not requester_match or not target_match:
         raise ValueError("Could not extract requester or target from request")
@@ -57,7 +66,7 @@ def _parse_admanager_users(operation) -> dict[str, dict]:
 
     # Buscar registros ADManagerRawClient que contienen JSON de respuesta
     for record in operation:
-        if 'ADManagerRawClient.get_users_list_info_from_admanager invoked' in record['content']:
+        if ADMANAGER_SEARCH in record['content']:
             # Extraer JSON desde "Raw Response: "
             content = record['content']
             raw_response_match = re.search(r'Raw Response: (\{.*?\})\s*,?\s*Raw status_code:', content, re.DOTALL)
@@ -86,6 +95,7 @@ def _parse_admanager_users(operation) -> dict[str, dict]:
                 'FIRST_NAME': user_data.get('FIRST_NAME', ''),
                 'LAST_NAME': user_data.get('LAST_NAME', ''),
                 'OFFICE': user_data.get('OFFICE', ''),  # Preserva cero inicial
+                'EMPLOYEE_ID': user_data.get('EMPLOYEE_ID', ''),
             }
 
     return users
@@ -144,6 +154,112 @@ def _parse_outcome(operation) -> dict:
     }
 
 
+def _find_by_employee_id(users: dict[str, dict], employee_id: str) -> dict:
+    """Busca en los datos de ADManager al usuario con ese EMPLOYEE_ID."""
+    for info in users.values():
+        if info['EMPLOYEE_ID'] == employee_id:
+            return info
+    return {}
+
+
+def _redact_password(message: str) -> str:
+    """Elimina la contraseña temporal que SAP incluye en su mensaje."""
+    return re.sub(r'\s*Contrase(ñ|n)a temporal:.*$', '', message,
+                  flags=re.IGNORECASE | re.DOTALL)
+
+
+def _parse_sap_outcome(operation) -> dict:
+    """updated_at, status code y resultado desde el POST a SAP y su respuesta.
+
+    La respuesta de SAP es repr de Python, no JSON.
+    """
+    updated_at = None
+    status_code = None
+    for record in operation:
+        content = record['content']
+        if 'HTTP Request: POST' in content and SAP_POST in content:
+            updated_at = record['timestamp']
+            code_match = re.search(r'"HTTP/1\.1 (\d{3})', content)
+            status_code = code_match.group(1) if code_match else None
+            break
+
+    if not updated_at:
+        raise ValueError("No se encontró el POST a SAP")
+
+    status = None
+    status_message = ''
+    for record in operation:
+        content = record['content']
+        start = content.find(SAP_RESPONSE)
+        if start == -1:
+            continue
+        try:
+            data = ast.literal_eval(content[start + len(SAP_RESPONSE):].strip())
+        except (ValueError, SyntaxError):
+            continue
+        # {'MT_RespAltaUsrResetPwd': {'Estatus': ..., 'Mensaje': ...}}
+        response = next(iter(data.values()), {})
+        status = response.get('Estatus')
+        status_message = _redact_password(response.get('Mensaje') or '')
+        break
+
+    if status is None:
+        raise ValueError("No se pudo extraer el estatus de la respuesta de SAP")
+
+    return {
+        'updated_at': updated_at,
+        'status': status,
+        'statusMessage': status_message,
+        'status_code': status_code,
+    }
+
+
+def extract_register(operation) -> ResetRecord:
+    """Ensambla un alta de usuario en SAP como ResetRecord."""
+    operation_id = None
+    for record in operation:
+        op_id_match = re.search(r'operation_Id=([a-f0-9]{32})', record['content'])
+        if op_id_match:
+            operation_id = op_id_match.group(1)
+            break
+
+    if not operation_id:
+        raise ValueError("Could not extract operation_id")
+
+    request_data = _parse_request(operation, REGISTER_ENDPOINT,
+                                  'requester_username', 'target_employee_id')
+    users_data = _parse_admanager_users(operation)
+    outcome_data = _parse_sap_outcome(operation)
+
+    requester = request_data['requester']
+    target = request_data['target']
+
+    # El requester llega como sAMAccountName, pero el target como employeeID.
+    requester_info = users_data.get(requester, {})
+    target_info = _find_by_employee_id(users_data, target)
+
+    requester_name = f"{requester_info.get('FIRST_NAME', '')} {requester_info.get('LAST_NAME', '')}".strip()
+    target_name = f"{target_info.get('FIRST_NAME', '')} {target_info.get('LAST_NAME', '')}".strip()
+
+    result = f"{outcome_data['status']} / {outcome_data['statusMessage']}"
+
+    return ResetRecord(
+        timestamp=request_data['timestamp'],
+        updated_at=outcome_data['updated_at'],
+        operation_id=operation_id,
+        requester=requester,
+        target=target,
+        action='register_user',
+        system='SAP',
+        requester_name=requester_name,
+        target_name=target_name,
+        requester_office=requester_info.get('OFFICE', ''),
+        target_office=target_info.get('OFFICE', ''),
+        result=result,
+        status_code=outcome_data['status_code'],
+    )
+
+
 def extract_reset(operation) -> ResetRecord:
     """Ensambla las tres etapas en un ResetRecord."""
     # Extraer operation_id del contenido
@@ -158,7 +274,12 @@ def extract_reset(operation) -> ResetRecord:
         raise ValueError("Could not extract operation_id")
 
     # Parsear las tres etapas
-    request_data = _parse_request(operation)
+    request_data = _parse_request(
+        operation, 
+        RESET_ENDPOINT,
+        'sAMAccountName_requester',
+        'sAMAccountName_target'
+    )
     users_data = _parse_admanager_users(operation)
     outcome_data = _parse_outcome(operation)
 
