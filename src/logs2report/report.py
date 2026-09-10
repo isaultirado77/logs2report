@@ -1,9 +1,9 @@
 from pathlib import Path
 import pandas as pd
-from .models import ResetRecord, COLUMNS
+from .models import ReportRow, COLUMNS
 
 
-def to_dataframe(records: list[ResetRecord]) -> pd.DataFrame:
+def to_dataframe(records: list[ReportRow]) -> pd.DataFrame:
     """Construye DataFrame desde lista de ResetRecord.
 
     Usa COLUMNS de models.py como única fuente de orden y encabezados.
@@ -24,7 +24,7 @@ def to_dataframe(records: list[ResetRecord]) -> pd.DataFrame:
     return df
 
 
-def write_csv(records: list[ResetRecord], output_path: str) -> None:
+def write_csv(records: list[ReportRow], output_path: str) -> None:
     """Escribe los registros en un CSV.
 
     Crea los directorios padre si no existen.
